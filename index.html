@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>My map</title>
+        <!--Bootstrap - Lastest compiled and minified CSS-->
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.1/dist/leaflet.css">
+        <script src="https://unpkg.com/leaflet@1.0.1/dist/leaflet.js"></script>
+        <script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+        <script src="js/leaflet.ajax.js"></script>
+        <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+        <style>
+            #header {
+                height: 75px;
+                background-color: darkgoldenrod;
+            }
+            #mapdiv {
+                height: 850px;
+                background-color: salmon;
+            }
+            #side_panel {
+                height: 850px;
+                background-color: rgba(255, 255, 255, 0.8)
+            }
+            #footer {
+                height:75px;
+                background-color: darkgrey;
+            }
+            .attraction{
+                margin-bottom: 5px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div id="header" class="col-md-12">
+            <h1 class=text-center>Mexico City</h1>
+        </div>
+        <div id="side_panel" class="col-md-3">
+            <h1 class="text-center">Attractions</h1>
+            <button id='zoomToZocalo' class="form-control btn-primary attraction">Zocalo</button>
+            <button id='btnBuffer' class="form-control btn-primary attraction">Buffer</button>
+            <button id='zoomToAirport' class="form-control btn-primary attraction">Airport</button>
+            <!--attraction 並非bootstrap裡面原生的CSS，而是另外自製的css class-->
+        </div>
+        <div id="mapdiv" class="col-md-9"></div>
+        <div id="footer" class="col-md-12">
+            <h4 id="map_coords" class="text-center">Latitude: 19.4 Longtitude: -99.1 Zoom Level:11 </h4>
+            <h4 class="text-center">&copy;2016 <a href="http://millermountain.com">Miller Mountain LLC</a></h4>
+        </div>
+    </body>
+
+    <script>
+        var mymap= L.map('mapdiv')
+        mymap.setView([19.4,-99.1],11); //Lat；Lon 按照順序
+
+        var backgroundLayer = L.tileLayer("https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg");
+        mymap.addLayer(backgroundLayer);
+
+        var zocaloMarket = L.circleMarker([19.43278,-99.13333],color="red",draggable=true,opacity=0.5);
+        zocaloMarket.addTo(mymap);
+        zocaloMarket.bindPopup("<h3 class='text-center'>ZocaloMarker</h1><a href='https://en.wikipedia.org/wiki/Z%C3%B3calo' target='blank'><img src='img/zocalo.jpg' width='200px'></a>");
+        // ZocaloMarker = L.marker([19.43278,-99.13333]).addTo(mymap).bindPopup("ZocaloMarker")
+        // 等同於前三行的寫法，Chain在一起
+
+        var polygon=L.polygon([[19,-100],[19.5,-100],[19,-99.5]]).addTo(mymap).bindPopup("Polygon")
+        
+        $("#zoomToZocalo").click(function(){
+            mymap.setView([19.43278,-99.13333],15)
+        });
+        $("#zoomToAirport").click(function(){
+            mymap.setView([19.43555,-99.08276],15)
+        });
+        //這個是用Jquery的功能，針對點擊左側的Btn反應
+        mymap.on('mousemove',function(e){
+            var str='Latitude: '+e.latlng.lat.toFixed(5) + ' Longitude: '+
+            e.latlng.lng.toFixed(5)+' Zoom Level: '+mymap.getZoom();
+            $('#map_coords').html(str)
+        })
+        //這個是用leaflet.js的功能，可以call mousemove
+        // var geojsonLayer = new L.GeoJSON.AJAX('data/attractions.geojson').addTo(mymap);
+        //pointToLayer是leadlet裡面的一個 function https://leafletjs.com/examples/geojson/
+        var geojsonLayer = new L.GeoJSON.AJAX('data/attractions.geojson',
+        {pointToLayer:function(feature,latlng){
+            var str = "<h4>"+feature.properties.name+"</h4><hr>";
+            str += "<a href='"+feature.properties.web+"' target='blank'>";
+            str += "test";
+            str += "</a>";
+            return L.marker(latlng).bindPopup(str)
+        }});
+        geojsonLayer.addTo(mymap);
+
+        var geojsonLayer = new L.GeoJSON.AJAX('data/attractions.geojson',
+        {pointToLayer:function(feature,latlng){
+            var str = "<button id= 'zoomTo"+feature.properties.name.replace(/ /g,'');
+            str += "' class='form-control btn btn-primary attraction'>";
+            str += feature.properties.name+"</button>";
+            $("#side_panel").append(str);
+            $("#zoomTo"+feature.properties.name.replace(/ /g,'')).click(function(){
+                mymap.setView([latlng.lat,latlng.lng],15);
+            });
+        }});
+        
+        //point to layer就是讓loop方法將geojson裡面的每個point拉出來丟回去
+        // 這裡在單機上跑會出錯，看報錯原因是因為  https://github.com/endRuz/Blog/issues/10
+
+        var geojsonLayer = new L.GeoJSON.AJAX('data/attractions.geojson')
+        var bufferLayer;
+        //如果function裡面宣告，當function被執行完之後，這個變數就會從記憶體被清掉，因此在外面宣告
+        $("#btnBuffer").click(function(){
+            if ($("#btnBuffer").html()=='Buffer'){
+                var bufferedAttractions = turf.buffer(geojsonLayer.toGeoJSON(), 1, {units: 'miles'});
+                bufferLayer = L.geoJSON(bufferedAttractions).addTo(mymap);
+                $("#btnBuffer").html("Remove Buffer");
+            } else {
+                mymap.removeLayer(bufferLayer);
+                $("#btnBuffer").html("Buffer");
+            }
+        })
+
+    </script>
+
+    
+</html>
